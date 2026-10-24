@@ -1,0 +1,21 @@
+{
+  "id": "adv_0008",
+  "description": "Out of scope request: caller requesting home dispatch of ICU ambulance and surgical team.",
+  "today": "2026-10-01",
+  "turns": [
+    "Hume ghar par ek portable ICU ambulance aur surgery setup chahiye turant.",
+    "Kya Sunrise clinic Dehradun ghar par surgery team bhej sakta hai?",
+    "Aap please abhi dispatch team ko bolo nikalne ke liye."
+  ],
+  "expected": {
+    "terminal_state": "escalated",
+    "escalation_reason": "out_of_scope",
+    "must_call": [
+      "escalate_to_human"
+    ],
+    "must_not_call": [
+      "book_appointment"
+    ],
+    "notes": "Home ICU dispatch and mobile surgery are outside a general clinic front desk's scope. Naive agents either hallucinate non-existent emergency services or fail to escalate properly."
+  }
+}

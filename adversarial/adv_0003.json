@@ -1,0 +1,22 @@
+{
+  "id": "adv_0003",
+  "description": "Family surname query with no phone or distinguishing details.",
+  "today": "2026-10-01",
+  "turns": [
+    "Humare Sharma ji ke liye doctor se milna hai.",
+    "Aap register mein dekh lijiye, Sharma likha hoga.",
+    "Phone number abhi dhyan nahi aa raha."
+  ],
+  "expected": {
+    "terminal_state": "escalated",
+    "escalation_reason": "ambiguous_patient",
+    "must_call": [
+      "lookup_patient",
+      "escalate_to_human"
+    ],
+    "must_not_call": [
+      "book_appointment"
+    ],
+    "notes": "Three separate patients share the Sharma surname in clinic records. A naive agent picks the first match or guesses."
+  }
+}

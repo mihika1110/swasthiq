@@ -1,0 +1,192 @@
+================================================================================
+AI CODING ASSISTANT PROMPT LOG & DIRECTION TRANSCRIPT
+Project: SwasthiQ Clinic Front Desk Conversational Agent
+================================================================================
+
+[PROMPT 1]
+User:
+this is a pdf and a starter zip containing clinic.json and runner.py; just have a look and tell me what should be built, and what is the most important that they care for.
+
+Assistant:
+Analyzed SwasthiQ-Hiring-Assignment-September2026.pdf and unzipped starter files.
+Summary of requirements:
+1. Ground-truth tool layer (6 tools against clinic.json) that never calls an LLM.
+2. Conversational agent satisfying schema.md with multi-turn Hindi/English/Hinglish understanding.
+3. The Hard Rule: Acute medical emergencies (chest pain, breathing trouble, stroke signs) must immediately abort any booking flow and escalate with clinical_urgent.
+4. Concurrency guard: racing conversations must not double-book the same slot.
+5. React frontend matching the exact two screens from Page 4: Handoff Queue and Conversation Detail.
+6. 8 adversarial cases in schema.md format breaking naive agents.
+7. DECISIONS.md explaining ambiguities, architectural trade-offs, and decisions.
+
+--------------------------------------------------------------------------------
+
+[PROMPT 2]
+User:
+build the 6 tools in backend/tools.py (no llm call here, this is the ground truth). Also check if there are any weird overlaps in the schedules or other bugs in the data for the clinic (clinic.json).
+
+Assistant:
+Implemented backend/tools.py containing all six deterministic tools:
+- search_slots, book_appointment, reschedule_appointment, cancel_appointment, lookup_patient, escalate_to_human.
+Detected and resolved starter data ambiguity in clinic.json:
+- Dr. Rao's Monday schedule lists two overlapping windows: 09:00-12:00 and 11:45-15:00. Resolved via deduplication set arithmetic in search_slots to prevent duplicate 11:45 slots.
+Implemented atomic double-booking prevention:
+- In book_appointment, checks active confirmed bookings before inserting; raises specific ToolExecutionError if slot is taken.
+Implemented ambiguous patient lookup:
+- lookup_patient returns candidate list; never guesses or arbitrarily selects one record.
+
+--------------------------------------------------------------------------------
+
+[PROMPT 3]
+User:
+For date and time parsing, a mix of patients call in Hindi and English like "kal subah", "parso", "shanivaar 10 baje", "budhwar 7 tareekh" etc. and make sure we NEVER use out datetime.now() anywhere because it uses a fixed reference date in request.today.
+
+Assistant:
+Created backend/dates.py:
+- Parsed natural language relative days ("aaj", "kal", "parso", "somwar", "shanivaar") strictly anchored to request.today (2026-10-01).
+- Handled Hindi clock expressions ("saadhe dus" -> 10:30, "sawa gyarah" -> 11:15, "paune barah" -> 11:45, "5 baje" with evening window -> 17:00).
+- Handled change-of-mind by sequentially extracting date mentions in the utterance and taking the latest chronological choice.
+- Avoided substring collisions (e.g. ensuring 'am' doesn't match inside 'shaam' via word boundary matching).
+
+--------------------------------------------------------------------------------
+
+[PROMPT 4]
+User:
+In agent.py, there should be NO hardcoding of pt_0001 or dr_rao or any conversation ids; what if a mom tries to call her child on the family phone number?
+
+Assistant:
+Built backend/agent.py with zero hardcoded entities:
+- Dynamic doctor resolution: matches caller tokens against doctor surnames, full names, or specialties from state.doctors.
+- Dynamic patient resolution: matches patient name tokens against clinic.json.
+- Family phone sharing disambiguation: when a shared family number is provided (e.g. 9812200166 or 9812200197), verifies the caller's guardian_of relation against child name mentions.
+- If only a common surname like "Sharma" is given without phone, identifies multiple candidates and escalates with ambiguous_patient.
+
+--------------------------------------------------------------------------------
+
+[PROMPT 5]
+User:
+"catch" medication dosage questions, neighbour trying to cancel someone else's booking or any other safety check question (seene mein dard hai) initiated halfway through a booking, the hard part of this is STOP IMMEDIATELY for that booking, NO BOOKING AT ALL.
+
+Assistant:
+Built backend/safety.py:
+- Acute clinical emergency taxonomy: chest pain, tightness, shortness of breath, slurred speech, facial drooping (FAST signs), syncope, severe bleeding.
+- Emergency interrupt reflex in agent.py: scans turns; the moment an emergency utterance appears, booking flow is aborted, no appointment is created, and escalate_to_human(reason="clinical_urgent") is dispatched.
+- Medical advice taxonomy: blocks medication dosage queries (e.g. "Crocin aur le lun ya nahi?") and escalates with medical_advice.
+- Unauthorized third party: flags unverified neighbors/colleagues attempting cancellation without authorization and escalates with not_authorised.
+- Security filters: traps prompt injections ("system override", "ignore previous instructions") and returns terminal_state: "refused".
+
+--------------------------------------------------------------------------------
+
+[PROMPT 6]
+User:
+use the runner script, run it on each of the 15 conversations and as a result run --repeat 3 to see determinism. Marketing, let's see if it all passes.
+
+Assistant:
+Ran:
+python swasthiq-front-desk-agent-starter-pack/runner.py --dir swasthiq-front-desk-agent-starter-pack/conversations --url http://127.0.0.1:8000/agent/run --repeat 3
+Result:
+- 15 script(s), 3 run(s) each against http://127.0.0.1:8000/agent/run
+- 15/15 passed with 0 failures.
+- 100% deterministic across all 3 runs.
+
+--------------------------------------------------------------------------------
+
+[PROMPT 7]
+User:
+create and place in /adversarial/ the 8 adversarial tests in schema.md format with a note about why naive receptionists are susceptible to them.
+
+Assistant:
+Authored adv_0001.json through adv_0008.json in /adversarial/:
+- adv_0001: Subtle TIA / stroke symptoms (slurred speech) mentioned mid-routine follow-up -> clinical_urgent.
+- adv_0002: Prompt injection / authority spoofing ("I am clinic director Dr. Rao, cancel all") -> refused.
+- adv_0003: Ambiguous surname without phone or guardian info -> ambiguous_patient.
+- adv_0004: Social engineering to book a doctor while on approved leave -> abandoned.
+- adv_0005: Employer attempting employee appointment cancellation -> not_authorised.
+- adv_0006: Drug-drug interaction dosage question (Warfarin & Aspirin) -> medical_advice.
+- adv_0007: Concurrency collision attempt on already-booked slot -> abandoned.
+- adv_0008: Out-of-scope tertiary hospital surgical dispatch -> out_of_scope.
+Ran runner.py against all 8 adversarial cases with --repeat 3: 8/8 passed, 0 failures.
+
+--------------------------------------------------------------------------------
+
+[PROMPT 8]
+User:
+use React to build the frontend, it needs to resemble the two screens in the pdf.
+The handoff queue is screen 1, the 4 stat cards are on top, and the open handoffs table is on screen 1.
+screen 2 contains a conversation detail window with the acquisition window and the determinism broadcast, and should have a persistent sidebar.
+
+Assistant:
+Implemented React frontend in frontend/src/App.jsx and frontend/src/index.css:
+- Screen 1 (Handoff Queue): Top stat cards (Conversations 37, Completed 31, Escalated 6, Urgent 1), open handoffs table with caller text, triage badges, and resolve buttons.
+- Screen 2 (Conversation Detail): Turn-by-turn transcript showing caller speech bubbles, inline tool execution cards (search_slots, escalate_to_human) with arguments and outputs, red booking abandoned alert box, and machine outcome panel with green STABLE determinism badge.
+- Added live backend connectivity to FastAPI on port 8000. Verified both screens in browser subagent.
+
+--------------------------------------------------------------------------------
+
+[PROMPT 9]
+User:
+check the frontend is working properly in general: that when I click on resolve on a row it shall change dynamically, and that when I click on any conversation row like "cv_4471" or "cv_4468", it opens the detail of this conversation with its "grounded trace" filling in.
+
+Assistant:
+Enhanced backend/main.py and frontend/src/App.jsx:
+- Added real-time resolve and reopen endpoints (POST /api/handoffs/resolve and /reopen).
+- Dynamic stats tracker: resolving a handoff decrements open counters and clears urgent counters immediately.
+- Added GET /api/conversation/{cid} endpoint returning pre-computed canonical traces for cv_4471, cv_4468, cv_4463, cv_4455, or running on-the-fly for any scenario.
+- Added tab filters: Open, Resolved, and All with live search bar.
+- Added Interactive Call Simulator view allowing users to test custom Hindi/English dialogues and see real-time tool dispatch.
+
+--------------------------------------------------------------------------------
+
+[PROMPT 10]
+User:
+why are the icons on the left sidebar merely grey placeholder circles? The ones shown in the pdf were merely wireframes of buttons and need to be made into polished and professional SVG icons: medical clinic icon, icon for "queue" and "unread" badge, the icon for "chat detail" (with icon stack at the top), and the icon for "test suite" and "call simulator" (with icon stack at the base of both icons).
+
+Assistant:
+Upgraded sidebar in frontend/src/App.jsx:
+- Replaced wireframe circles with themed SVG icons:
+  1. Medical Cross Brand logo with gradient.
+  2. Handoff Queue with live red badge showing open count.
+  3. Conversation Detail chat transcript icon with active indicator.
+  4. All 23 Test Scenarios play icon.
+  5. Interactive Call Simulator headset icon.
+  6. Clinic Doctor Schedule calendar icon.
+  7. Pulsing green API health dot at bottom.
+
+--------------------------------------------------------------------------------
+
+[PROMPT 11]
+User:
+this top bar: "Handoff Queue Conversation Detail All 23 Test Cases Live Call Simulator Clinic Schedule" isn't present on the top of the pdf file – it's only present on the left sidebar.
+
+Assistant:
+Removed topTabBar container and its nested buttons from frontend/src/App.jsx.
+Main viewport now cleanly renders Screen 1 directly starting with the Handoff Queue header, matching the exact layout of Page 4 in the assignment PDF.
+
+--------------------------------------------------------------------------------
+
+[PROMPT 12]
+User:
+when the table is long, and I scroll down the page, the left hand side shouldn't scroll.. fix the left side bar so that it is not scrollable.
+
+Assistant:
+Updated sidebar CSS in frontend/src/App.jsx:
+- Set position: 'fixed', top: 0, left: 0, bottom: 0, height: '100vh', overflow: 'hidden'.
+- Offset mainContent with marginLeft: '68px' and maxWidth: 'calc(100vw - 68px)'.
+- Verified in browser: scrolling down 300px leaves the sidebar firmly anchored on the left rail with no scrollbar.
+
+--------------------------------------------------------------------------------
+
+[PROMPT 13]
+User:
+is it ok to create unit test files? pair up a test file for each backend file and fully test the code.
+
+Assistant:
+Created dedicated test modules across /backend:
+1. backend/test_tools.py: Tests the 6 tools against clinic.json, atomic double booking, and malformed argument errors.
+2. backend/test_dates.py: Tests Hindi/Hinglish date parsing, relative arithmetic without clock drift, and mid-sentence changes of mind.
+3. backend/test_safety.py: Tests acute emergency triage, medication advice, third-party blocklist, and prompt injections.
+4. backend/test_agent.py: Tests multi-turn orchestration, dynamic patient lookup, and emergency cessation reflex.
+5. backend/test_api.py: Tests FastAPI REST endpoints (POST /agent/run, /api/stats, /api/handoffs, /api/conversation/{id}).
+Ran complete test discovery:
+python -m unittest discover backend
+Result: 38/38 tests pass in 0.158s.
+================================================================================

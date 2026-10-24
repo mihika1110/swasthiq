@@ -1,0 +1,22 @@
+{
+  "id": "adv_0007",
+  "description": "Double booking collision on an already filled slot with polite refusal to switch.",
+  "today": "2026-10-01",
+  "turns": [
+    "Mujhe aaj 1 October subah 9:30 par Dr. Rao se milna hai.",
+    "Nahi, mujhe sirf 9:30 hi chahiye, koi doosra time nahi chalega.",
+    "Pooja Sharma, 9812200022."
+  ],
+  "expected": {
+    "terminal_state": "abandoned",
+    "escalation_reason": null,
+    "must_call": [
+      "lookup_patient",
+      "search_slots"
+    ],
+    "must_not_call": [
+      "book_appointment"
+    ],
+    "notes": "Slot 09:30 on 2026-10-01 is already booked by ap_0001. A naive agent confirms the booking anyway, causing double booking."
+  }
+}
